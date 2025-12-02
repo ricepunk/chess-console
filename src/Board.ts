@@ -11,13 +11,13 @@ export class Board {
 	}
 
 	initializeBoard(): void {
-		// Taruh pion
+		// Tempatkan pion
 		for (let i = 0; i < 8; i++) {
 			this.board[1][i] = new Piece(PieceType.Pawn, PieceColor.Black);
 			this.board[6][i] = new Piece(PieceType.Pawn, PieceColor.White);
 		}
 
-		// Taruh bidak hitam lainnya
+		// Tempatkan bidak hitam lainnya
 		this.board[0][0] = new Piece(PieceType.Rook, PieceColor.Black);
 		this.board[0][1] = new Piece(PieceType.Knight, PieceColor.Black);
 		this.board[0][2] = new Piece(PieceType.Bishop, PieceColor.Black);
@@ -27,7 +27,7 @@ export class Board {
 		this.board[0][6] = new Piece(PieceType.Knight, PieceColor.Black);
 		this.board[0][7] = new Piece(PieceType.Rook, PieceColor.Black);
 
-		// Taruh bidak putih lainnya
+		// Tempatkan bidak putih lainnya
 		this.board[7][0] = new Piece(PieceType.Rook, PieceColor.White);
 		this.board[7][1] = new Piece(PieceType.Knight, PieceColor.White);
 		this.board[7][2] = new Piece(PieceType.Bishop, PieceColor.White);
@@ -38,8 +38,10 @@ export class Board {
 		this.board[7][7] = new Piece(PieceType.Rook, PieceColor.White);
 	}
 
-	// Cuma placeholder buat display, nanti diimplementasiin lagi
+	// Menampilkan papan catur ke konsol
 	display(): void {
+		// Bersihkan konsol sebelum menampilkan papan yang baru
+		console.clear();
 		console.log("  a b c d e f g h");
 		console.log("  -----------------");
 		for (let i = 0; i < 8; i++) {

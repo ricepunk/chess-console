@@ -1,29 +1,30 @@
 import { PassThrough } from "node:stream";
 import type { Board } from "../src/Board";
 import { Game } from "../src/Game";
+import { GameMode } from "../src/GameMode";
 import { Piece, PieceColor, PieceType } from "../src/Piece";
 
 describe("Game", () => {
-	// biome-ignore lint/suspicious/noExplicitAny: test
-	let game: any; // Dijadiin 'any' biar bisa akses private member buat testing
+	// biome-ignore lint/suspicious/noExplicitAny: Diperlukan untuk mengakses member privat dalam pengujian
+	let game: any;
 	let board: Board;
 	let inputStream: PassThrough;
 	let outputStream: PassThrough;
 
 	beforeEach(() => {
-		jest.spyOn(console, "log").mockImplementation(() => {}); // Biar console.log gak berisik pas testing
+		jest.spyOn(console, "log").mockImplementation(() => {}); // Menekan output console.log selama pengujian
 		inputStream = new PassThrough();
 		outputStream = new PassThrough();
-		game = new Game(inputStream, outputStream);
-		board = game.board; // Akses board privat buat testing
+		game = new Game(GameMode.PlayerVsPlayer, inputStream, outputStream);
+		board = game.board; // Mengakses board privat untuk tujuan pengujian
 	});
 
 	afterEach(() => {
-		jest.restoreAllMocks(); // Balikin lagi console.log
-		game.close(); // Tutup readline biar gak ada handle yang nyangkut
+		jest.restoreAllMocks(); // Mengembalikan implementasi console.log
+		game.close(); // Menutup antarmuka readline untuk mencegah kebocoran handle
 	});
 
-	// Fungsi bantuan buat naruh bidak di papan buat testing
+	// Fungsi pembantu untuk menempatkan bidak di papan untuk pengujian
 	const setPiece = (
 		row: number,
 		col: number,
@@ -36,7 +37,7 @@ describe("Game", () => {
 		board.board[row][col] = piece;
 	};
 
-	// Fungsi bantuan buat ngosongin kotak
+	// Fungsi pembantu untuk mengosongkan sebuah kotak
 	const clearSquare = (row: number, col: number) => {
 		board.board[row][col] = null;
 	};
@@ -72,19 +73,19 @@ describe("Game", () => {
 
 	describe("isValidMove - General", () => {
 		beforeEach(() => {
-			// Kosongin papan buat setup test tertentu
+			// Mengosongkan papan untuk penyiapan pengujian spesifik
 			board.board = Array(8)
 				.fill(null)
 				.map(() => Array(8).fill(null));
 		});
 
 		it("should return false if no piece at starting position", () => {
-			clearSquare(6, 0); // Pastiin kotaknya kosong
+			clearSquare(6, 0); // Memastikan kotak kosong
 			expect(game.isValidMove(6, 0, 4, 0)).toBe(false);
 		});
 
 		it("should return false if piece belongs to opponent", () => {
-			setPiece(6, 0, PieceType.Pawn, PieceColor.Black); // Pion hitam pas giliran putih
+			setPiece(6, 0, PieceType.Pawn, PieceColor.Black); // Pion hitam saat giliran putih
 			game.currentPlayer = PieceColor.White;
 			expect(game.isValidMove(6, 0, 4, 0)).toBe(false);
 		});
@@ -97,7 +98,7 @@ describe("Game", () => {
 
 		it("should return false if capturing own piece", () => {
 			setPiece(6, 0, PieceType.Pawn, PieceColor.White);
-			setPiece(5, 0, PieceType.Pawn, PieceColor.White); // Bidak sendiri di tujuan
+			setPiece(5, 0, PieceType.Pawn, PieceColor.White); // Bidak sendiri di kotak tujuan
 			game.currentPlayer = PieceColor.White;
 			expect(game.isValidMove(6, 0, 5, 0)).toBe(false);
 		});
@@ -128,25 +129,25 @@ describe("Game", () => {
 
 		it("should not allow white pawn 2-square move if obstructed", () => {
 			setPiece(6, 0, PieceType.Pawn, PieceColor.White);
-			setPiece(5, 0, PieceType.Pawn, PieceColor.Black); // Ada yang halangin
+			setPiece(5, 0, PieceType.Pawn, PieceColor.Black); // Terdapat penghalang
 			expect(game.isValidMove(6, 0, 4, 0)).toBe(false);
 		});
 
 		it("should allow white pawn diagonal capture", () => {
 			setPiece(6, 1, PieceType.Pawn, PieceColor.White);
-			setPiece(5, 0, PieceType.Pawn, PieceColor.Black); // Bidak yang mau dimakan
+			setPiece(5, 0, PieceType.Pawn, PieceColor.Black); // Bidak yang akan dimakan
 			expect(game.isValidMove(6, 1, 5, 0)).toBe(true);
 		});
 
 		it("should not allow white pawn diagonal move without capture", () => {
 			setPiece(6, 1, PieceType.Pawn, PieceColor.White);
-			clearSquare(5, 0); // Nggak ada bidak buat dimakan
+			clearSquare(5, 0); // Tidak ada bidak untuk dimakan
 			expect(game.isValidMove(6, 1, 5, 0)).toBe(false);
 		});
 
 		it("should not allow white pawn straight capture", () => {
 			setPiece(6, 0, PieceType.Pawn, PieceColor.White);
-			setPiece(5, 0, PieceType.Pawn, PieceColor.Black); // Bidak yang mau dimakan
+			setPiece(5, 0, PieceType.Pawn, PieceColor.Black); // Bidak yang akan dimakan
 			expect(game.isValidMove(6, 0, 5, 0)).toBe(false);
 		});
 	});
@@ -171,13 +172,13 @@ describe("Game", () => {
 
 		it("should not allow obstructed horizontal rook move", () => {
 			setPiece(0, 0, PieceType.Rook, PieceColor.White);
-			setPiece(0, 1, PieceType.Pawn, PieceColor.Black); // Ada yang halangin
+			setPiece(0, 1, PieceType.Pawn, PieceColor.Black); // Terdapat penghalang
 			expect(game.isValidMove(0, 0, 0, 7)).toBe(false);
 		});
 
 		it("should not allow obstructed vertical rook move", () => {
 			setPiece(0, 0, PieceType.Rook, PieceColor.White);
-			setPiece(1, 0, PieceType.Pawn, PieceColor.Black); // Ada yang halangin
+			setPiece(1, 0, PieceType.Pawn, PieceColor.Black); // Terdapat penghalang
 			expect(game.isValidMove(0, 0, 7, 0)).toBe(false);
 		});
 
@@ -209,14 +210,14 @@ describe("Game", () => {
 
 		it("should allow knight to jump over pieces", () => {
 			setPiece(3, 3, PieceType.Knight, PieceColor.White);
-			setPiece(4, 3, PieceType.Pawn, PieceColor.Black); // Ada yang halangin
-			expect(game.isValidMove(3, 3, 5, 4)).toBe(true); // Kuda bisa loncat
+			setPiece(4, 3, PieceType.Pawn, PieceColor.Black); // Terdapat penghalang
+			expect(game.isValidMove(3, 3, 5, 4)).toBe(true); // Kuda dapat melompat
 		});
 
 		it("should not allow invalid knight move", () => {
 			setPiece(3, 3, PieceType.Knight, PieceColor.White);
-			expect(game.isValidMove(3, 3, 3, 4)).toBe(false); // Jalan lurus
-			expect(game.isValidMove(3, 3, 4, 4)).toBe(false); // Jalan diagonal
+			expect(game.isValidMove(3, 3, 3, 4)).toBe(false); // Gerakan lurus
+			expect(game.isValidMove(3, 3, 4, 4)).toBe(false); // Gerakan diagonal
 		});
 	});
 
@@ -230,12 +231,12 @@ describe("Game", () => {
 
 		it("should allow valid diagonal bishop move", () => {
 			setPiece(0, 2, PieceType.Bishop, PieceColor.White);
-			expect(game.isValidMove(0, 2, 5, 7)).toBe(true); // Dibenerin: langkah diagonal yang bener
+			expect(game.isValidMove(0, 2, 5, 7)).toBe(true); // Diperbaiki: langkah diagonal yang valid
 		});
 
 		it("should not allow obstructed diagonal bishop move", () => {
 			setPiece(0, 2, PieceType.Bishop, PieceColor.White);
-			setPiece(1, 3, PieceType.Pawn, PieceColor.Black); // Ada yang halangin
+			setPiece(1, 3, PieceType.Pawn, PieceColor.Black); // Terdapat penghalang
 			expect(game.isValidMove(0, 2, 7, 7)).toBe(false);
 		});
 
@@ -266,12 +267,12 @@ describe("Game", () => {
 
 		it("should allow valid diagonal queen move", () => {
 			setPiece(0, 3, PieceType.Queen, PieceColor.White);
-			expect(game.isValidMove(0, 3, 3, 0)).toBe(true); // Dibenerin: langkah diagonal yang bener
+			expect(game.isValidMove(0, 3, 3, 0)).toBe(true); // Diperbaiki: langkah diagonal yang valid
 		});
 
 		it("should not allow obstructed queen move", () => {
 			setPiece(0, 3, PieceType.Queen, PieceColor.White);
-			setPiece(0, 4, PieceType.Pawn, PieceColor.Black); // Ada yang halangin
+			setPiece(0, 4, PieceType.Pawn, PieceColor.Black); // Terdapat penghalang
 			expect(game.isValidMove(0, 3, 0, 7)).toBe(false);
 		});
 

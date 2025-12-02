@@ -1,22 +1,29 @@
 import * as readline from "node:readline";
+import { AIPlayer, type Move } from "./AIPlayer";
 import { Board } from "./Board";
+import { GameMode } from "./GameMode";
 import { type Piece, PieceColor, PieceType } from "./Piece";
 
 export class Game {
 	private board: Board;
 	private currentPlayer: PieceColor;
 	private rl: readline.Interface;
+	private gameMode: GameMode;
+	private aiPlayer: AIPlayer;
 
 	constructor(
+		gameMode: GameMode = GameMode.PlayerVsPlayer,
 		input: NodeJS.ReadableStream = process.stdin,
 		output: NodeJS.WritableStream = process.stdout,
 	) {
 		this.board = new Board();
-		this.currentPlayer = PieceColor.White; // Putih jalan duluan
+		this.currentPlayer = PieceColor.White; // Putih memulai lebih dulu
 		this.rl = readline.createInterface({
 			input,
 			output,
 		});
+		this.gameMode = gameMode;
+		this.aiPlayer = new AIPlayer();
 	}
 
 	private parseInput(input: string): {
@@ -28,7 +35,7 @@ export class Game {
 		const parts = input.trim().split(" ");
 		if (parts.length !== 2) {
 			console.log(
-				'Format input salah. Harusnya "start_coord end_coord" (contoh: "1,3 2,3" atau "b2 b3").',
+				'Format input tidak valid. Harusnya "start_coord end_coord" (contoh: "1,3 2,3" atau "b2 b3").',
 			);
 			return null;
 		}
@@ -36,7 +43,7 @@ export class Game {
 		const parseCoordinate = (
 			coord: string,
 		): { row: number; col: number } | null => {
-			// Urus input angka (contoh: "1,3")
+			// Menangani input numerik (contoh: "1,3")
 			const numMatch = coord.match(/^(\d),(\d)$/);
 			if (numMatch) {
 				const row = parseInt(numMatch[1], 10);
@@ -46,11 +53,11 @@ export class Game {
 				}
 			}
 
-			// Urus notasi catur (contoh: "b2")
+			// Menangani notasi catur (contoh: "b2")
 			const algMatch = coord.match(/^([a-h])([1-8])$/i);
 			if (algMatch) {
 				const col = algMatch[1].toLowerCase().charCodeAt(0) - "a".charCodeAt(0);
-				const row = 8 - parseInt(algMatch[2], 10); // Baris catur itu 1-8, tapi di array-nya 0-7
+				const row = 8 - parseInt(algMatch[2], 10); // Peringkat baris catur adalah 1-8, yang dipetakan ke indeks array 0-7
 				return { row, col };
 			}
 
@@ -61,7 +68,7 @@ export class Game {
 		const endCoord = parseCoordinate(parts[1]);
 
 		if (!startCoord || !endCoord) {
-			console.log("Format koordinat salah.");
+			console.log("Format koordinat tidak valid.");
 			return null;
 		}
 
@@ -79,7 +86,7 @@ export class Game {
 		endRow: number,
 		endCol: number,
 	): boolean {
-		// Cek batas papan dasar (udah ada di parseCoordinate, tapi bagus buat jaga-jaga)
+		// Pemeriksaan batas papan dasar (sudah ada di parseCoordinate, tapi bagus sebagai pemeriksaan ganda)
 		if (
 			startRow < 0 ||
 			startRow >= 8 ||
@@ -98,7 +105,7 @@ export class Game {
 		const targetPiece = this.board.board[endRow][endCol];
 
 		if (!piece) {
-			console.log("Nggak ada bidak di posisi awal.");
+			console.log("Tidak ada bidak di posisi awal.");
 			return false;
 		}
 
@@ -108,17 +115,17 @@ export class Game {
 		}
 
 		if (startRow === endRow && startCol === endCol) {
-			console.log("Nggak bisa jalan ke kotak yang sama.");
+			console.log("Tidak dapat bergerak ke kotak yang sama.");
 			return false;
 		}
 
-		// Nggak bisa makan bidak sendiri
+		// Tidak dapat memakan bidak sendiri
 		if (targetPiece && targetPiece.color === piece.color) {
-			console.log("Nggak bisa makan bidak sendiri.");
+			console.log("Tidak dapat memakan bidak sendiri.");
 			return false;
 		}
 
-		// Lanjut ke validasi khusus per bidak
+		// Mendelegasikan ke validasi khusus per bidak
 		switch (piece.type) {
 			case PieceType.Pawn:
 				return this.isValidPawnMove(piece, startRow, startCol, endRow, endCol);
@@ -165,7 +172,7 @@ export class Game {
 			}
 			this.board.board[endRow][endCol] = piece;
 			this.board.board[startRow][startCol] = null;
-			piece.hasMoved = true; // Tandai bidak sudah pernah jalan
+			piece.hasMoved = true; // Menandai bahwa bidak ini telah bergerak
 		}
 		return { kingCaptured };
 	}
@@ -182,15 +189,49 @@ export class Game {
 		this.board.display();
 
 		while (true) {
-			// Loop utama game
+			// Loop utama permainan
 			console.log(`Sekarang giliran ${this.currentPlayer}.`);
-			const input = await this.askQuestion(
-				'Masukkan langkahmu (contoh: "b2 b3" atau "6,1 5,1"): ',
-			);
 
-			const move = this.parseInput(input);
+			let move: Move | null = null;
+
+			if (this.gameMode === GameMode.PlayerVsPlayer) {
+				const input = await this.askQuestion(
+					'Masukkan langkahmu (contoh: "b2 b3" atau "6,1 5,1"): ',
+				);
+				move = this.parseInput(input);
+				if (!move) {
+					continue;
+				}
+			} else if (this.gameMode === GameMode.ComputerVsComputer) {
+				// Matikan console.log sementara agar tidak mengotori output saat AI mencari langkah
+				const originalLog = console.log;
+				console.log = () => {};
+
+				move = this.aiPlayer.findRandomMove(
+					this.board,
+					this.currentPlayer,
+					this,
+				);
+
+				// Kembalikan console.log
+				console.log = originalLog;
+
+				if (move) {
+					const from = `${String.fromCharCode(97 + move.startCol)}${8 - move.startRow}`;
+					const to = `${String.fromCharCode(97 + move.endCol)}${8 - move.endRow}`;
+					console.log(
+						`Komputer (${this.currentPlayer}) melangkah: ${from} ${to}`,
+					);
+				}
+				// Tambahkan delay kecil agar game tidak berjalan terlalu cepat
+				await new Promise((resolve) => setTimeout(resolve, 500));
+			}
+
 			if (!move) {
-				continue;
+				console.log(
+					`Tidak ada langkah valid untuk ${this.currentPlayer}. Permainan berakhir seri (Stalemate).`,
+				);
+				break;
 			}
 
 			const { startRow, startCol, endRow, endCol } = move;
@@ -208,12 +249,23 @@ export class Game {
 					console.log(
 						`SKAKMAT! ${this.currentPlayer} menang karena Raja lawan termakan!`,
 					);
-					break; // Game selesai
+					break; // Mengakhiri permainan
 				}
 				this.switchPlayer();
+			} else {
+				// 'else' ini berarti langkahnya tidak valid.
+
+				// Hanya tampilkan peringatan khusus jika ini adalah giliran AI yang membuat kesalahan.
+				if (this.gameMode === GameMode.ComputerVsComputer) {
+					console.log("AI mencoba langkah yang tidak valid. Ini aneh.");
+				}
+
+				// Untuk pemain manusia, pesan error spesifik (misalnya "Langkah pion salah")
+				// sudah ditampilkan di dalam isValidMove, jadi kita tidak perlu melakukan apa-apa lagi di sini.
+				// Loop akan otomatis berlanjut untuk pemain yang sama.
 			}
-			// Kalo langkahnya salah, isValidMove bakal ngasih tau alasannya, dan loop lanjut buat pemain yang sama
 		}
+		this.close();
 	}
 
 	private askQuestion(query: string): Promise<string> {
@@ -229,30 +281,30 @@ export class Game {
 	): boolean {
 		const rowDiff = endRow - startRow;
 		const colDiff = Math.abs(endCol - startCol);
-		const direction = piece.color === PieceColor.White ? -1 : 1; // Putih jalan ke atas (baris berkurang), Hitam ke bawah (baris bertambah)
+		const direction = piece.color === PieceColor.White ? -1 : 1; // Putih bergerak ke atas (baris berkurang), Hitam ke bawah (baris bertambah)
 
 		const targetPiece = this.board.board[endRow][endCol];
 
-		// Gerak maju biasa 1 kotak
+		// Gerakan maju normal 1 kotak
 		if (colDiff === 0 && rowDiff === direction && !targetPiece) {
 			return true;
 		}
 
-		// Gerak maju awal 2 kotak
+		// Gerakan maju awal 2 kotak
 		if (
 			colDiff === 0 &&
 			rowDiff === 2 * direction &&
 			!piece.hasMoved &&
 			!targetPiece
 		) {
-			// Cek kalo kotak di antaranya juga kosong
+			// Periksa jika kotak di antaranya juga kosong
 			const inBetweenRow = startRow + direction;
 			if (!this.board.board[inBetweenRow][startCol]) {
 				return true;
 			}
 		}
 
-		// Makan bidak secara diagonal
+		// Memakan bidak secara diagonal
 		if (
 			colDiff === 1 &&
 			rowDiff === direction &&
@@ -262,7 +314,7 @@ export class Game {
 			return true;
 		}
 
-		console.log("Langkah pion salah.");
+		console.log("Langkah pion tidak valid.");
 		return false;
 	}
 
@@ -292,7 +344,7 @@ export class Game {
 				}
 			}
 		}
-		// Jalur diagonal (buat gajah dan ratu)
+		// Jalur diagonal (untuk gajah dan ratu)
 		else if (Math.abs(startRow - endRow) === Math.abs(startCol - endCol)) {
 			const rowStep = endRow > startRow ? 1 : -1;
 			const colStep = endCol > startCol ? 1 : -1;
@@ -301,9 +353,9 @@ export class Game {
 			let currentCol = startCol + colStep;
 
 			while (currentRow !== endRow && currentCol !== endCol) {
-				// Iterasi sampe satu langkah sebelum akhir
+				// Iterasi hingga satu langkah sebelum akhir
 				if (this.board.board[currentRow][currentCol] !== null) {
-					return false; // Ada yang halangin
+					return false; // Ditemukan penghalang
 				}
 				currentRow += rowStep;
 				currentCol += colStep;
@@ -319,13 +371,13 @@ export class Game {
 		endRow: number,
 		endCol: number,
 	): boolean {
-		// Benteng jalan lurus horizontal atau vertikal
+		// Benteng bergerak lurus horizontal atau vertikal
 		if (startRow === endRow || startCol === endCol) {
 			if (this.isPathClear(startRow, startCol, endRow, endCol)) {
 				return true;
 			}
 		}
-		console.log("Langkah benteng salah.");
+		console.log("Langkah benteng tidak valid.");
 		return false;
 	}
 
@@ -339,12 +391,12 @@ export class Game {
 		const rowDiff = Math.abs(endRow - startRow);
 		const colDiff = Math.abs(endCol - startCol);
 
-		// Kuda jalan bentuk L: 2 kotak di satu arah (baris atau kolom) dan 1 kotak tegak lurus.
+		// Kuda bergerak dalam bentuk L: 2 kotak di satu arah (baris atau kolom) dan 1 kotak tegak lurus.
 		if ((rowDiff === 2 && colDiff === 1) || (rowDiff === 1 && colDiff === 2)) {
 			return true;
 		}
 
-		console.log("Langkah kuda salah.");
+		console.log("Langkah kuda tidak valid.");
 		return false;
 	}
 
@@ -355,13 +407,13 @@ export class Game {
 		endRow: number,
 		endCol: number,
 	): boolean {
-		// Gajah jalan diagonal
+		// Gajah bergerak diagonal
 		if (Math.abs(startRow - endRow) === Math.abs(startCol - endCol)) {
 			if (this.isPathClear(startRow, startCol, endRow, endCol)) {
 				return true;
 			}
 		}
-		console.log("Langkah gajah salah.");
+		console.log("Langkah gajah tidak valid.");
 		return false;
 	}
 
@@ -372,7 +424,7 @@ export class Game {
 		endRow: number,
 		endCol: number,
 	): boolean {
-		// Ratu jalan lurus horizontal, vertikal, atau diagonal
+		// Ratu bergerak lurus horizontal, vertikal, atau diagonal
 		if (
 			startRow === endRow ||
 			startCol === endCol ||
@@ -382,7 +434,7 @@ export class Game {
 				return true;
 			}
 		}
-		console.log("Langkah ratu salah.");
+		console.log("Langkah ratu tidak valid.");
 		return false;
 	}
 
@@ -396,13 +448,13 @@ export class Game {
 		const rowDiff = Math.abs(endRow - startRow);
 		const colDiff = Math.abs(endCol - startCol);
 
-		// Raja jalan satu kotak ke segala arah
+		// Raja bergerak satu kotak ke segala arah
 		if (rowDiff <= 1 && colDiff <= 1) {
-			// Cek tambahan buat rokade dan skak/skakmat bakal ditaruh di sini
+			// Pemeriksaan tambahan untuk rokade dan skak/skakmat akan ditempatkan di sini
 			return true;
 		}
 
-		console.log("Langkah raja salah.");
+		console.log("Langkah raja tidak valid.");
 		return false;
 	}
 
