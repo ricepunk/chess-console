@@ -194,15 +194,14 @@ export class Game {
 
 			let move: Move | null = null;
 
-			if (this.gameMode === GameMode.PlayerVsPlayer) {
-				const input = await this.askQuestion(
-					'Masukkan langkahmu (contoh: "b2 b3" atau "6,1 5,1"): ',
-				);
-				move = this.parseInput(input);
-				if (!move) {
-					continue;
-				}
-			} else if (this.gameMode === GameMode.ComputerVsComputer) {
+			const isComputerTurn =
+				this.gameMode === GameMode.ComputerVsComputer ||
+				(this.gameMode === GameMode.PlayerVsComputer &&
+					this.currentPlayer === PieceColor.Black) ||
+				(this.gameMode === GameMode.ComputerVsPlayer &&
+					this.currentPlayer === PieceColor.White);
+
+			if (isComputerTurn) {
 				// Matikan console.log sementara agar tidak mengotori output saat AI mencari langkah
 				const originalLog = console.log;
 				console.log = () => {};
@@ -225,6 +224,15 @@ export class Game {
 				}
 				// Tambahkan delay kecil agar game tidak berjalan terlalu cepat
 				await new Promise((resolve) => setTimeout(resolve, 500));
+			} else {
+				// Giliran pemain manusia
+				const input = await this.askQuestion(
+					'Masukkan langkahmu (contoh: "b2 b3" atau "6,1 5,1"): ',
+				);
+				move = this.parseInput(input);
+				if (!move) {
+					continue;
+				}
 			}
 
 			if (!move) {
@@ -256,7 +264,7 @@ export class Game {
 				// 'else' ini berarti langkahnya tidak valid.
 
 				// Hanya tampilkan peringatan khusus jika ini adalah giliran AI yang membuat kesalahan.
-				if (this.gameMode === GameMode.ComputerVsComputer) {
+				if (isComputerTurn) {
 					console.log("AI mencoba langkah yang tidak valid. Ini aneh.");
 				}
 
@@ -267,7 +275,6 @@ export class Game {
 		}
 		this.close();
 	}
-
 	private askQuestion(query: string): Promise<string> {
 		return new Promise((resolve) => this.rl.question(query, resolve));
 	}

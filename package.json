@@ -9,7 +9,12 @@
 	"type": "commonjs",
 	"scripts": {
 		"start": "node dist/index.js",
-		"test": "jest "
+		"start:ai": "node dist/run-ai-game.js",
+		"start:pvc": "node dist/run-pvc-game.js",
+		"test": "jest ",
+		"lint": "npx @biomejs/biome lint --write",
+		"format": "npx @biomejs/biome format --write",
+		"check": "npx @biomejs/biome check --write"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.3.8",
