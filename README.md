@@ -29,8 +29,10 @@ This project fulfills the following objectives:
     *   Queen
     *   King
     *   Also includes validation for path obstruction for sliding pieces (Rooks, Bishops, Queens).
+*   **Pawn Promotion**: Pawns that reach the opponent's back rank are automatically promoted to a Queen (for AI) or allow the player to choose between a Queen, Rook, Bishop, or Knight (for human players).
+*   **Castling**: Supports both kingside and queenside castling, including all standard rules such as king and rook not having moved, clear path, and no checks.
 *   **Win Condition**: The game ends when a player captures the opponent's King.
-*   **Thoroughly Tested**: The project includes a suite of **55 unit tests** using Jest, covering:
+*   **Thoroughly Tested**: The project includes a comprehensive suite of unit tests using Jest, covering:
     *   Correct board and piece initialization.
     *   Input parsing and validation.
     *   Valid and invalid move logic for every piece type.
