@@ -1,0 +1,22 @@
+{
+	"name": "chess-console",
+	"version": "1.0.0",
+	"description": "",
+	"main": "index.js",
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"type": "commonjs",
+	"scripts": {
+		"start": "node dist/index.js",
+		"test": "jest "
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.3.8",
+		"@types/jest": "^30.0.0",
+		"@types/node": "^24.10.1",
+		"jest": "^30.2.0",
+		"ts-jest": "^29.4.6",
+		"typescript": "^5.9.3"
+	}
+}
