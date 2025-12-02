@@ -2,7 +2,7 @@ import * as readline from "node:readline";
 import { AIPlayer, type Move } from "./AIPlayer";
 import { Board } from "./Board";
 import { GameMode } from "./GameMode";
-import { type Piece, PieceColor, PieceType } from "./Piece";
+import { Piece, PieceColor, PieceType } from "./Piece";
 
 export class Game {
 	private board: Board;
@@ -156,16 +156,115 @@ export class Game {
 		}
 	}
 
-	private executeMove(
+	public isSquareAttacked(
+		row: number,
+		col: number,
+		attackerColor: PieceColor,
+	): boolean {
+		// Periksa serangan dari semua kemungkinan arah
+		for (let r = 0; r < 8; r++) {
+			for (let c = 0; c < 8; c++) {
+				const attackingPiece = this.board.board[r][c];
+				if (attackingPiece && attackingPiece.color === attackerColor) {
+					// Simulasikan gerakan dari bidak penyerang ke kotak target
+					// dan periksa apakah itu langkah yang valid (tanpa memvalidasi giliran saat ini).
+					// Penting: Kita tidak bisa memanggil `isValidMove` secara langsung karena itu akan memeriksa `this.currentPlayer`.
+					// Kita perlu mensimulasikan validasi langkah untuk bidak lawan.
+					const originalPlayer = this.currentPlayer;
+					this.currentPlayer = attackerColor; // Beralih sementara untuk validasi
+					let canAttack = false;
+					// We need to check for the piece type and call the correct validation method
+					switch (attackingPiece.type) {
+						case PieceType.Pawn: {
+							// Logika serangan pion spesifik
+							const pawnDirection =
+								attackingPiece.color === PieceColor.White ? -1 : 1;
+							if (
+								r + pawnDirection === row &&
+								(c + 1 === col || c - 1 === col)
+							) {
+								canAttack = true;
+							}
+							break;
+						}
+						// Untuk bidak lain, kita bisa menggunakan kembali logika gerakan mereka
+						case PieceType.Rook:
+							canAttack = this.isValidRookMove(attackingPiece, r, c, row, col);
+							break;
+						case PieceType.Knight:
+							canAttack = this.isValidKnightMove(
+								attackingPiece,
+								r,
+								c,
+								row,
+								col,
+							);
+							break;
+						case PieceType.Bishop:
+							canAttack = this.isValidBishopMove(
+								attackingPiece,
+								r,
+								c,
+								row,
+								col,
+							);
+							break;
+						case PieceType.Queen:
+							canAttack = this.isValidQueenMove(attackingPiece, r, c, row, col);
+							break;
+						case PieceType.King: {
+							// We use a simplified version for the king to avoid infinite recursion
+							const rowDiff = Math.abs(row - r);
+							const colDiff = Math.abs(col - c);
+							if (rowDiff <= 1 && colDiff <= 1) {
+								canAttack = true;
+							}
+							break;
+						}
+					}
+
+					this.currentPlayer = originalPlayer; // Kembalikan giliran
+					if (canAttack) {
+						return true;
+					}
+				}
+			}
+		}
+		return false;
+	}
+
+	private async executeMove(
 		startRow: number,
 		startCol: number,
 		endRow: number,
 		endCol: number,
-	): { kingCaptured: boolean } {
+	): Promise<{ kingCaptured: boolean }> {
 		const piece = this.board.board[startRow][startCol];
 		let kingCaptured = false;
 
 		if (piece) {
+			// Deteksi upaya rokade
+			if (piece.type === PieceType.King && Math.abs(endCol - startCol) === 2) {
+				// Pindahkan benteng
+				if (endCol > startCol) {
+					// Rokade sisi raja (kanan)
+					const rook = this.board.board[startRow][7];
+					if (rook) {
+						this.board.board[startRow][5] = rook;
+						this.board.board[startRow][7] = null;
+						rook.hasMoved = true;
+					}
+				} else {
+					// Rokade sisi ratu (kiri)
+					const rook = this.board.board[startRow][0];
+					if (rook) {
+						this.board.board[startRow][3] = rook;
+						this.board.board[startRow][0] = null;
+						rook.hasMoved = true;
+					}
+				}
+			}
+
 			const capturedPiece = this.board.board[endRow][endCol];
 			if (capturedPiece && capturedPiece.type === PieceType.King) {
 				kingCaptured = true;
@@ -173,8 +272,68 @@ export class Game {
 			this.board.board[endRow][endCol] = piece;
 			this.board.board[startRow][startCol] = null;
 			piece.hasMoved = true; // Menandai bahwa bidak ini telah bergerak
+
+			// Periksa promosi pion
+			if (piece.type === PieceType.Pawn) {
+				if (
+					(piece.color === PieceColor.White && endRow === 0) ||
+					(piece.color === PieceColor.Black && endRow === 7)
+				) {
+					await this.promotePawn(endRow, endCol);
+				}
+			}
 		}
 		return { kingCaptured };
+	}
+
+	private async promotePawn(row: number, col: number): Promise<void> {
+		const pawn = this.board.board[row][col];
+		if (!pawn || pawn.type !== PieceType.Pawn) {
+			return;
+		}
+
+		console.log("Pion dipromosikan!");
+
+		const isComputerTurn =
+			this.gameMode === GameMode.ComputerVsComputer ||
+			(this.gameMode === GameMode.PlayerVsComputer &&
+				this.currentPlayer === PieceColor.Black) ||
+			(this.gameMode === GameMode.ComputerVsPlayer &&
+				this.currentPlayer === PieceColor.White);
+
+		let promotionType: PieceType;
+
+		if (isComputerTurn) {
+			promotionType = PieceType.Queen; // AI selalu mempromosikan menjadi Ratu
+			console.log("Komputer mempromosikan pion menjadi Ratu.");
+		} else {
+			const choice = await this.askQuestion(
+				"Promosikan pion menjadi (Q, R, B, K): ",
+			);
+			switch (choice.trim().toUpperCase()) {
+				case "Q":
+					promotionType = PieceType.Queen;
+					break;
+				case "R":
+					promotionType = PieceType.Rook;
+					break;
+				case "B":
+					promotionType = PieceType.Bishop;
+					break;
+				case "K":
+					promotionType = PieceType.Knight;
+					break;
+				default:
+					console.log(
+						"Pilihan tidak valid. Promosi menjadi Ratu secara default.",
+					);
+					promotionType = PieceType.Queen;
+			}
+		}
+
+		const newPiece = new Piece(promotionType, pawn.color);
+		newPiece.hasMoved = true; // Bidak yang dipromosikan dianggap telah bergerak
+		this.board.board[row][col] = newPiece;
 	}
 
 	private switchPlayer(): void {
@@ -245,7 +404,7 @@ export class Game {
 			const { startRow, startCol, endRow, endCol } = move;
 
 			if (this.isValidMove(startRow, startCol, endRow, endCol)) {
-				const { kingCaptured } = this.executeMove(
+				const { kingCaptured } = await this.executeMove(
 					startRow,
 					startCol,
 					endRow,
@@ -445,8 +604,8 @@ export class Game {
 		return false;
 	}
 
-	private isValidKingMove(
-		_piece: Piece,
+	public isValidKingMove(
+		piece: Piece,
 		startRow: number,
 		startCol: number,
 		endRow: number,
@@ -455,10 +614,55 @@ export class Game {
 		const rowDiff = Math.abs(endRow - startRow);
 		const colDiff = Math.abs(endCol - startCol);
 
-		// Raja bergerak satu kotak ke segala arah
+		// Gerakan normal satu kotak
 		if (rowDiff <= 1 && colDiff <= 1) {
-			// Pemeriksaan tambahan untuk rokade dan skak/skakmat akan ditempatkan di sini
 			return true;
+		}
+
+		// Logika Rokade
+		if (
+			rowDiff === 0 &&
+			colDiff === 2 &&
+			!piece.hasMoved &&
+			startRow === endRow
+		) {
+			const opponentColor =
+				piece.color === PieceColor.White ? PieceColor.Black : PieceColor.White;
+
+			// Raja tidak boleh sedang dalam keadaan skak
+			if (this.isSquareAttacked(startRow, startCol, opponentColor)) {
+				console.log("Tidak bisa rokade saat sedang skak.");
+				return false;
+			}
+
+			// Rokade sisi raja (kanan)
+			if (endCol > startCol) {
+				const rook = this.board.board[startRow][7];
+				if (rook && rook.type === PieceType.Rook && !rook.hasMoved) {
+					// Jalur harus bersih & tidak diserang
+					if (
+						this.isPathClear(startRow, startCol, startRow, 7) &&
+						!this.isSquareAttacked(startRow, startCol + 1, opponentColor) &&
+						!this.isSquareAttacked(startRow, startCol + 2, opponentColor)
+					) {
+						return true;
+					}
+				}
+			}
+			// Rokade sisi ratu (kiri)
+			else {
+				const rook = this.board.board[startRow][0];
+				if (rook && rook.type === PieceType.Rook && !rook.hasMoved) {
+					// Jalur harus bersih & tidak diserang
+					if (
+						this.isPathClear(startRow, startCol, startRow, 0) &&
+						!this.isSquareAttacked(startRow, startCol - 1, opponentColor) &&
+						!this.isSquareAttacked(startRow, startCol - 2, opponentColor)
+					) {
+						return true;
+					}
+				}
+			}
 		}
 
 		console.log("Langkah raja tidak valid.");
