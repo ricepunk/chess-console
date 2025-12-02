@@ -330,18 +330,189 @@ describe("Game", () => {
 			expect(board.board[5][0]?.hasMoved).toBe(true);
 		});
 
-		it("should return kingCaptured: true if a king is captured", () => {
+		it("should return kingCaptured: true if a king is captured", async () => {
 			setPiece(0, 4, PieceType.King, PieceColor.Black); // Raja Hitam
 			setPiece(1, 4, PieceType.Pawn, PieceColor.White); // Pion Putih
-			const { kingCaptured } = game.executeMove(1, 4, 0, 4);
+			const askQuestionMock = jest
+				.spyOn(game, "askQuestion")
+				.mockResolvedValue("Q");
+			const { kingCaptured } = await game.executeMove(1, 4, 0, 4);
 			expect(kingCaptured).toBe(true);
+			askQuestionMock.mockRestore();
 		});
 
-		it("should return kingCaptured: false if no king is captured", () => {
+		it("should return kingCaptured: false if no king is captured", async () => {
 			setPiece(0, 0, PieceType.Rook, PieceColor.Black);
 			setPiece(1, 0, PieceType.Pawn, PieceColor.White);
-			const { kingCaptured } = game.executeMove(1, 0, 0, 0);
+			const askQuestionMock = jest
+				.spyOn(game, "askQuestion")
+				.mockResolvedValue("Q");
+			const { kingCaptured } = await game.executeMove(1, 0, 0, 0);
 			expect(kingCaptured).toBe(false);
+			askQuestionMock.mockRestore();
+		});
+	});
+
+	describe("Pawn Promotion", () => {
+		beforeEach(() => {
+			board.board = Array(8)
+				.fill(null)
+				.map(() => Array(8).fill(null));
+			game.currentPlayer = PieceColor.White;
+		});
+
+		it("should promote a white pawn to a Queen on reaching the last rank", async () => {
+			setPiece(1, 0, PieceType.Pawn, PieceColor.White);
+			clearSquare(0, 0);
+
+			// Mock the question asking for promotion
+			const askQuestionMock = jest
+				.spyOn(game, "askQuestion")
+				.mockResolvedValue("Q");
+
+			await game.executeMove(1, 0, 0, 0);
+
+			const promotedPiece = board.board[0][0];
+			expect(promotedPiece).toBeInstanceOf(Piece);
+			expect(promotedPiece?.type).toBe(PieceType.Queen);
+			expect(promotedPiece?.color).toBe(PieceColor.White);
+			askQuestionMock.mockRestore();
+		});
+
+		it("should promote a black pawn to a Rook on reaching the last rank", async () => {
+			setPiece(6, 7, PieceType.Pawn, PieceColor.Black);
+			clearSquare(7, 7);
+			game.currentPlayer = PieceColor.Black;
+
+			// Mock the question asking for promotion
+			const askQuestionMock = jest
+				.spyOn(game, "askQuestion")
+				.mockResolvedValue("R");
+
+			await game.executeMove(6, 7, 7, 7);
+
+			const promotedPiece = board.board[7][7];
+			expect(promotedPiece).toBeInstanceOf(Piece);
+			expect(promotedPiece?.type).toBe(PieceType.Rook);
+			expect(promotedPiece?.color).toBe(PieceColor.Black);
+			askQuestionMock.mockRestore();
+		});
+
+		it("should default to Queen if player provides invalid promotion choice", async () => {
+			setPiece(1, 0, PieceType.Pawn, PieceColor.White);
+			clearSquare(0, 0);
+
+			// Mock the question asking for promotion with an invalid choice
+			const askQuestionMock = jest
+				.spyOn(game, "askQuestion")
+				.mockResolvedValue("InvalidChoice");
+
+			await game.executeMove(1, 0, 0, 0);
+
+			const promotedPiece = board.board[0][0];
+			expect(promotedPiece?.type).toBe(PieceType.Queen);
+			askQuestionMock.mockRestore();
+		});
+
+		it("should auto-promote to Queen for AI player", async () => {
+			// Atur mode permainan ke PlayerVsComputer, di mana Hitam adalah AI
+			game = new Game(GameMode.PlayerVsComputer, inputStream, outputStream);
+			board = game.board; // Perbarui referensi papan
+			board.board = Array(8)
+				.fill(null)
+				.map(() => Array(8).fill(null));
+
+			setPiece(6, 5, PieceType.Pawn, PieceColor.Black);
+			clearSquare(7, 5);
+			game.currentPlayer = PieceColor.Black;
+
+			// Tidak ada input yang diperlukan dari stream untuk AI
+			await game.executeMove(6, 5, 7, 5);
+
+			const promotedPiece = board.board[7][5];
+			expect(promotedPiece).toBeInstanceOf(Piece);
+			expect(promotedPiece?.type).toBe(PieceType.Queen);
+			expect(promotedPiece?.color).toBe(PieceColor.Black);
+		});
+	});
+
+	describe("Castling", () => {
+		beforeEach(() => {
+			board.board = Array(8)
+				.fill(null)
+				.map(() => Array(8).fill(null));
+			game.currentPlayer = PieceColor.White;
+		});
+
+		it("should allow valid kingside castling for white", () => {
+			setPiece(7, 4, PieceType.King, PieceColor.White, false);
+			setPiece(7, 7, PieceType.Rook, PieceColor.White, false);
+			clearSquare(7, 5);
+			clearSquare(7, 6);
+			expect(game.isValidMove(7, 4, 7, 6)).toBe(true);
+		});
+
+		it("should allow valid queenside castling for white", () => {
+			setPiece(7, 4, PieceType.King, PieceColor.White, false);
+			setPiece(7, 0, PieceType.Rook, PieceColor.White, false);
+			clearSquare(7, 1);
+			clearSquare(7, 2);
+			clearSquare(7, 3);
+			expect(game.isValidMove(7, 4, 7, 2)).toBe(true);
+		});
+
+		it("should not allow castling if king has moved", () => {
+			setPiece(7, 4, PieceType.King, PieceColor.White, true); // King has moved
+			setPiece(7, 7, PieceType.Rook, PieceColor.White, false);
+			clearSquare(7, 5);
+			clearSquare(7, 6);
+			expect(game.isValidMove(7, 4, 7, 6)).toBe(false);
+		});
+
+		it("should not allow castling if rook has moved", () => {
+			setPiece(7, 4, PieceType.King, PieceColor.White, false);
+			setPiece(7, 7, PieceType.Rook, PieceColor.White, true); // Rook has moved
+			clearSquare(7, 5);
+			clearSquare(7, 6);
+			expect(game.isValidMove(7, 4, 7, 6)).toBe(false);
+		});
+
+		it("should not allow castling if path is blocked", () => {
+			setPiece(7, 4, PieceType.King, PieceColor.White, false);
+			setPiece(7, 7, PieceType.Rook, PieceColor.White, false);
+			setPiece(7, 5, PieceType.Knight, PieceColor.White); // Path is blocked
+			clearSquare(7, 6);
+			expect(game.isValidMove(7, 4, 7, 6)).toBe(false);
+		});
+
+		it("should not allow castling if king is in check", () => {
+			setPiece(7, 4, PieceType.King, PieceColor.White, false);
+			setPiece(7, 7, PieceType.Rook, PieceColor.White, false);
+			setPiece(0, 4, PieceType.Rook, PieceColor.Black); // King is in check
+			clearSquare(7, 5);
+			clearSquare(7, 6);
+			expect(game.isValidMove(7, 4, 7, 6)).toBe(false);
+		});
+
+		it("should not allow castling through an attacked square", () => {
+			setPiece(7, 4, PieceType.King, PieceColor.White, false);
+			setPiece(7, 7, PieceType.Rook, PieceColor.White, false);
+			setPiece(0, 5, PieceType.Rook, PieceColor.Black); // Attacks square king moves through
+			clearSquare(7, 5);
+			clearSquare(7, 6);
+			expect(game.isValidMove(7, 4, 7, 6)).toBe(false);
+		});
+
+		it("should move the rook correctly after kingside castling", async () => {
+			setPiece(7, 4, PieceType.King, PieceColor.White, false);
+			setPiece(7, 7, PieceType.Rook, PieceColor.White, false);
+			clearSquare(7, 5);
+			clearSquare(7, 6);
+			await game.executeMove(7, 4, 7, 6);
+			expect(board.board[7][6]?.type).toBe(PieceType.King);
+			expect(board.board[7][5]?.type).toBe(PieceType.Rook);
+			expect(board.board[7][4]).toBeNull();
+			expect(board.board[7][7]).toBeNull();
 		});
 	});
 });
