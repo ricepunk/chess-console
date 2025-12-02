@@ -12,6 +12,11 @@ This project fulfills the following objectives:
 ## Features
 
 *   **Standard 8x8 Board**: The game initializes a standard 8x8 chessboard with all pieces in their correct starting positions, represented by Unicode symbols.
+*   **Multiple Game Modes**: Play the game in various configurations:
+    *   **Player vs. Player (PvP)**: Two human players take turns.
+    *   **Player vs. Computer (PvC)**: A human player plays against the AI.
+    *   **Computer vs. Computer (CvC)**: Two AIs play against each other automatically.
+*   **Basic AI Player**: A simple AI implementation that selects a random valid move, enabling automated gameplay or playing against a computer.
 *   **Interactive Gameplay**: Players take turns (White and Black) to move their pieces. The board is redisplayed after each move.
 *   **Flexible Input Handling**: Supports two types of coordinate input for moves:
     *   **Algebraic Notation**: e.g., `e2 e4`
@@ -29,7 +34,7 @@ This project fulfills the following objectives:
     *   Correct board and piece initialization.
     *   Input parsing and validation.
     *   Valid and invalid move logic for every piece type.
-    *   The resource management of the test suite has been optimized to prevent open handles and memory leaks.
+    *   The test suite's resource management has been optimized to prevent open handles and memory leaks.
 
 ## How to Run
 
@@ -47,10 +52,19 @@ This project fulfills the following objectives:
     This will create a `dist` directory with the compiled JavaScript files.
 
 3.  **Start the Game**:
-    Run the following command to start the interactive game:
-    ```bash
-    npm start
-    ```
+    Run the following command to start the game in your desired mode:
+    *   **Player vs. Player (PvP)**:
+        ```bash
+        npm start
+        ```
+    *   **Player vs. Computer (PvC)**: You play as White.
+        ```bash
+        npm run start:pvc
+        ```
+    *   **Computer vs. Computer (CvC)**: The AI plays automatically.
+        ```bash
+        npm run start:ai
+        ```
 
 ## How to Run Tests
 
