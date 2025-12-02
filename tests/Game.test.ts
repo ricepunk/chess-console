@@ -316,40 +316,18 @@ describe("Game", () => {
 			game.currentPlayer = PieceColor.White;
 		});
 
-		it("should move a piece to the target square", () => {
+		it("should move a piece to the target square", async () => {
 			setPiece(6, 0, PieceType.Pawn, PieceColor.White);
-			game.executeMove(6, 0, 5, 0);
+			await game.executeMove(6, 0, 5, 0);
 			expect(board.board[5][0]).toBeInstanceOf(Piece);
 			expect(board.board[5][0]?.type).toBe(PieceType.Pawn);
 			expect(board.board[6][0]).toBeNull();
 		});
 
-		it("should set hasMoved to true after moving a piece", () => {
+		it("should set hasMoved to true after moving a piece", async () => {
 			setPiece(6, 0, PieceType.Pawn, PieceColor.White, false);
-			game.executeMove(6, 0, 5, 0);
+			await game.executeMove(6, 0, 5, 0);
 			expect(board.board[5][0]?.hasMoved).toBe(true);
-		});
-
-		it("should return kingCaptured: true if a king is captured", async () => {
-			setPiece(0, 4, PieceType.King, PieceColor.Black); // Raja Hitam
-			setPiece(1, 4, PieceType.Pawn, PieceColor.White); // Pion Putih
-			const askQuestionMock = jest
-				.spyOn(game, "askQuestion")
-				.mockResolvedValue("Q");
-			const { kingCaptured } = await game.executeMove(1, 4, 0, 4);
-			expect(kingCaptured).toBe(true);
-			askQuestionMock.mockRestore();
-		});
-
-		it("should return kingCaptured: false if no king is captured", async () => {
-			setPiece(0, 0, PieceType.Rook, PieceColor.Black);
-			setPiece(1, 0, PieceType.Pawn, PieceColor.White);
-			const askQuestionMock = jest
-				.spyOn(game, "askQuestion")
-				.mockResolvedValue("Q");
-			const { kingCaptured } = await game.executeMove(1, 0, 0, 0);
-			expect(kingCaptured).toBe(false);
-			askQuestionMock.mockRestore();
 		});
 	});
 
@@ -513,6 +491,63 @@ describe("Game", () => {
 			expect(board.board[7][5]?.type).toBe(PieceType.Rook);
 			expect(board.board[7][4]).toBeNull();
 			expect(board.board[7][7]).toBeNull();
+		});
+	});
+
+	describe("Check, Checkmate, and Stalemate", () => {
+		beforeEach(() => {
+			board.board = Array(8)
+				.fill(null)
+				.map(() => Array(8).fill(null));
+			game.currentPlayer = PieceColor.White;
+		});
+
+		it("should not allow a move that leaves the king in check (pinned piece)", () => {
+			// King Putih di e1, Benteng Hitam di e8, Benteng Putih di e2
+			setPiece(7, 4, PieceType.King, PieceColor.White);
+			setPiece(0, 4, PieceType.Rook, PieceColor.Black);
+			setPiece(6, 4, PieceType.Rook, PieceColor.White); // Benteng ini di-pin
+
+			// Mencoba memindahkan benteng yang di-pin adalah langkah ilegal
+			expect(game.isValidMove(6, 4, 6, 5)).toBe(false);
+		});
+
+		it("should not allow the king to move into a checked square", () => {
+			setPiece(7, 4, PieceType.King, PieceColor.White);
+			setPiece(0, 3, PieceType.Rook, PieceColor.Black); // Menyerang kotak d1 (7,3)
+
+			// Mencoba memindahkan raja ke kotak yang diserang
+			expect(game.isValidMove(7, 4, 7, 3)).toBe(false);
+		});
+
+		it("should detect the conditions for checkmate", () => {
+			// Atur posisi skakmat (Ratu & Raja vs Raja)
+			// Raja Hitam di h8 (0,7), di-skak oleh Ratu Putih di g7 (1,6)
+			// Raja Putih di f6 (2,5) melindungi ratu dan membatasi gerak
+			setPiece(0, 7, PieceType.King, PieceColor.Black);
+			setPiece(1, 6, PieceType.Queen, PieceColor.White);
+			setPiece(2, 5, PieceType.King, PieceColor.White);
+
+			game.currentPlayer = PieceColor.Black; // Sekarang giliran hitam
+
+			// Verifikasi kondisi skakmat
+			expect(game.isKingInCheck(PieceColor.Black)).toBe(true);
+			expect(game.getAllValidMovesForColor(PieceColor.Black).length).toBe(0);
+		});
+
+		it("should detect the conditions for stalemate", () => {
+			// Atur posisi stalemate
+			// Raja Hitam di h8, tidak di-skak
+			// Ratu Putih di g6, mengontrol semua kotak pelarian
+			setPiece(0, 7, PieceType.King, PieceColor.Black);
+			setPiece(2, 6, PieceType.Queen, PieceColor.White);
+			setPiece(7, 7, PieceType.King, PieceColor.White); // Perlu raja putih agar valid
+
+			game.currentPlayer = PieceColor.Black; // Sekarang giliran hitam
+
+			// Verifikasi kondisi stalemate
+			expect(game.isKingInCheck(PieceColor.Black)).toBe(false);
+			expect(game.getAllValidMovesForColor(PieceColor.Black).length).toBe(0);
 		});
 	});
 });

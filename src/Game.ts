@@ -80,13 +80,85 @@ export class Game {
 		};
 	}
 
+	private findKingPosition(
+		color: PieceColor,
+	): { row: number; col: number } | null {
+		for (let r = 0; r < 8; r++) {
+			for (let c = 0; c < 8; c++) {
+				const piece = this.board.board[r][c];
+				if (piece && piece.type === PieceType.King && piece.color === color) {
+					return { row: r, col: c };
+				}
+			}
+		}
+		return null;
+	}
+
+	private isKingInCheck(color: PieceColor): boolean {
+		const kingPos = this.findKingPosition(color);
+		if (!kingPos) {
+			return false; // Seharusnya tidak pernah terjadi dalam game normal
+		}
+		const opponentColor =
+			color === PieceColor.White ? PieceColor.Black : PieceColor.White;
+		return this.isSquareAttacked(kingPos.row, kingPos.col, opponentColor);
+	}
+
 	private isValidMove(
 		startRow: number,
 		startCol: number,
 		endRow: number,
 		endCol: number,
 	): boolean {
-		// Pemeriksaan batas papan dasar (sudah ada di parseCoordinate, tapi bagus sebagai pemeriksaan ganda)
+		const piece = this.board.board[startRow][startCol];
+
+		// 1. Pemeriksaan awal yang cepat
+		if (
+			!piece ||
+			piece.color !== this.currentPlayer ||
+			(this.board.board[endRow][endCol] &&
+				this.board.board[endRow][endCol]?.color === this.currentPlayer)
+		) {
+			return false;
+		}
+
+		// 2. Periksa apakah langkah tersebut valid secara mekanis untuk bidak tersebut
+		if (
+			!this.isMoveMechanicallyValid(piece, startRow, startCol, endRow, endCol)
+		) {
+			return false;
+		}
+
+		// 3. Simulasikan langkah dan periksa apakah raja sendiri menjadi dalam keadaan skak
+		const targetPiece = this.board.board[endRow][endCol];
+		// Lakukan langkah sementara
+		this.board.board[endRow][endCol] = piece;
+		this.board.board[startRow][startCol] = null;
+
+		const kingInCheck = this.isKingInCheck(this.currentPlayer);
+
+		// Kembalikan langkah (sangat penting!)
+		this.board.board[startRow][startCol] = piece;
+		this.board.board[endRow][endCol] = targetPiece;
+
+		if (kingInCheck) {
+			console.log(
+				"Langkah tidak valid: Raja Anda akan berada dalam keadaan skak.",
+			);
+			return false;
+		}
+
+		return true;
+	}
+
+	private isMoveMechanicallyValid(
+		piece: Piece,
+		startRow: number,
+		startCol: number,
+		endRow: number,
+		endCol: number,
+	): boolean {
+		// Pemeriksaan batas papan dasar
 		if (
 			startRow < 0 ||
 			startRow >= 8 ||
@@ -101,27 +173,8 @@ export class Game {
 			return false;
 		}
 
-		const piece = this.board.board[startRow][startCol];
-		const targetPiece = this.board.board[endRow][endCol];
-
-		if (!piece) {
-			console.log("Tidak ada bidak di posisi awal.");
-			return false;
-		}
-
-		if (piece.color !== this.currentPlayer) {
-			console.log(`Sekarang giliran ${this.currentPlayer}.`);
-			return false;
-		}
-
 		if (startRow === endRow && startCol === endCol) {
 			console.log("Tidak dapat bergerak ke kotak yang sama.");
-			return false;
-		}
-
-		// Tidak dapat memakan bidak sendiri
-		if (targetPiece && targetPiece.color === piece.color) {
-			console.log("Tidak dapat memakan bidak sendiri.");
 			return false;
 		}
 
@@ -238,52 +291,47 @@ export class Game {
 		startCol: number,
 		endRow: number,
 		endCol: number,
-	): Promise<{ kingCaptured: boolean }> {
+	): Promise<void> {
 		const piece = this.board.board[startRow][startCol];
-		let kingCaptured = false;
+		if (!piece) {
+			return;
+		}
 
-		if (piece) {
-			// Deteksi upaya rokade
-			if (piece.type === PieceType.King && Math.abs(endCol - startCol) === 2) {
-				// Pindahkan benteng
-				if (endCol > startCol) {
-					// Rokade sisi raja (kanan)
-					const rook = this.board.board[startRow][7];
-					if (rook) {
-						this.board.board[startRow][5] = rook;
-						this.board.board[startRow][7] = null;
-						rook.hasMoved = true;
-					}
-				} else {
-					// Rokade sisi ratu (kiri)
-					const rook = this.board.board[startRow][0];
-					if (rook) {
-						this.board.board[startRow][3] = rook;
-						this.board.board[startRow][0] = null;
-						rook.hasMoved = true;
-					}
+		// Deteksi upaya rokade
+		if (piece.type === PieceType.King && Math.abs(endCol - startCol) === 2) {
+			// Pindahkan benteng
+			if (endCol > startCol) {
+				// Rokade sisi raja (kanan)
+				const rook = this.board.board[startRow][7];
+				if (rook) {
+					this.board.board[startRow][5] = rook;
+					this.board.board[startRow][7] = null;
+					rook.hasMoved = true;
 				}
-			}
-
-			const capturedPiece = this.board.board[endRow][endCol];
-			if (capturedPiece && capturedPiece.type === PieceType.King) {
-				kingCaptured = true;
-			}
-			this.board.board[endRow][endCol] = piece;
-			this.board.board[startRow][startCol] = null;
-			piece.hasMoved = true; // Menandai bahwa bidak ini telah bergerak
-
-			// Periksa promosi pion
-			if (piece.type === PieceType.Pawn) {
-				if (
-					(piece.color === PieceColor.White && endRow === 0) ||
-					(piece.color === PieceColor.Black && endRow === 7)
-				) {
-					await this.promotePawn(endRow, endCol);
+			} else {
+				// Rokade sisi ratu (kiri)
+				const rook = this.board.board[startRow][0];
+				if (rook) {
+					this.board.board[startRow][3] = rook;
+					this.board.board[startRow][0] = null;
+					rook.hasMoved = true;
 				}
 			}
 		}
-		return { kingCaptured };
+
+		this.board.board[endRow][endCol] = piece;
+		this.board.board[startRow][startCol] = null;
+		piece.hasMoved = true; // Menandai bahwa bidak ini telah bergerak
+
+		// Periksa promosi pion
+		if (piece.type === PieceType.Pawn) {
+			if (
+				(piece.color === PieceColor.White && endRow === 0) ||
+				(piece.color === PieceColor.Black && endRow === 7)
+			) {
+				await this.promotePawn(endRow, endCol);
+			}
+		}
 	}
 
 	private async promotePawn(row: number, col: number): Promise<void> {
@@ -343,16 +391,57 @@ export class Game {
 				: PieceColor.White;
 	}
 
+	private getAllValidMovesForColor(color: PieceColor): Move[] {
+		const validMoves: Move[] = [];
+		for (let r1 = 0; r1 < 8; r1++) {
+			for (let c1 = 0; c1 < 8; c1++) {
+				const piece = this.board.board[r1][c1];
+				if (piece && piece.color === color) {
+					for (let r2 = 0; r2 < 8; r2++) {
+						for (let c2 = 0; c2 < 8; c2++) {
+							// Simulasikan giliran untuk isValidMove
+							const originalPlayer = this.currentPlayer;
+							this.currentPlayer = color;
+							if (this.isValidMove(r1, c1, r2, c2)) {
+								validMoves.push({
+									startRow: r1,
+									startCol: c1,
+									endRow: r2,
+									endCol: c2,
+								});
+							}
+							this.currentPlayer = originalPlayer;
+						}
+					}
+				}
+			}
+		}
+		return validMoves;
+	}
+
 	async play(): Promise<void> {
 		console.log("Game Catur Dimulai!");
 		this.board.display();
 
 		while (true) {
-			// Loop utama permainan
 			console.log(`Sekarang giliran ${this.currentPlayer}.`);
 
-			let move: Move | null = null;
+			// Periksa kondisi akhir permainan (Skakmat/Stalemate)
+			const allValidMoves = this.getAllValidMovesForColor(this.currentPlayer);
+			if (allValidMoves.length === 0) {
+				if (this.isKingInCheck(this.currentPlayer)) {
+					this.board.display();
+					console.log(
+						`SKAKMAT! ${this.currentPlayer === PieceColor.White ? PieceColor.Black : PieceColor.White} menang!`,
+					);
+				} else {
+					this.board.display();
+					console.log("STALEMATE! Permainan berakhir seri.");
+				}
+				break; // Akhiri permainan
+			}
 
+			let move: Move | null = null;
 			const isComputerTurn =
 				this.gameMode === GameMode.ComputerVsComputer ||
 				(this.gameMode === GameMode.PlayerVsComputer &&
@@ -361,17 +450,13 @@ export class Game {
 					this.currentPlayer === PieceColor.White);
 
 			if (isComputerTurn) {
-				// Matikan console.log sementara agar tidak mengotori output saat AI mencari langkah
 				const originalLog = console.log;
 				console.log = () => {};
-
 				move = this.aiPlayer.findRandomMove(
 					this.board,
 					this.currentPlayer,
 					this,
 				);
-
-				// Kembalikan console.log
 				console.log = originalLog;
 
 				if (move) {
@@ -381,10 +466,8 @@ export class Game {
 						`Komputer (${this.currentPlayer}) melangkah: ${from} ${to}`,
 					);
 				}
-				// Tambahkan delay kecil agar game tidak berjalan terlalu cepat
 				await new Promise((resolve) => setTimeout(resolve, 500));
 			} else {
-				// Giliran pemain manusia
 				const input = await this.askQuestion(
 					'Masukkan langkahmu (contoh: "b2 b3" atau "6,1 5,1"): ',
 				);
@@ -396,40 +479,28 @@ export class Game {
 
 			if (!move) {
 				console.log(
-					`Tidak ada langkah valid untuk ${this.currentPlayer}. Permainan berakhir seri (Stalemate).`,
+					`Tidak ada langkah valid untuk ${this.currentPlayer}. Ini aneh, seharusnya sudah ditangani oleh deteksi stalemate.`,
 				);
-				break;
+				continue;
 			}
 
 			const { startRow, startCol, endRow, endCol } = move;
 
 			if (this.isValidMove(startRow, startCol, endRow, endCol)) {
-				const { kingCaptured } = await this.executeMove(
-					startRow,
-					startCol,
-					endRow,
-					endCol,
-				);
+				await this.executeMove(startRow, startCol, endRow, endCol);
 				this.board.display();
 
-				if (kingCaptured) {
-					console.log(
-						`SKAKMAT! ${this.currentPlayer} menang karena Raja lawan termakan!`,
-					);
-					break; // Mengakhiri permainan
-				}
 				this.switchPlayer();
-			} else {
-				// 'else' ini berarti langkahnya tidak valid.
 
-				// Hanya tampilkan peringatan khusus jika ini adalah giliran AI yang membuat kesalahan.
+				// Beri tahu pemain jika mereka dalam keadaan skak
+				if (this.isKingInCheck(this.currentPlayer)) {
+					console.log(`SKAK! Raja ${this.currentPlayer} dalam bahaya!`);
+				}
+			} else {
+				// isValidMove sudah menampilkan log error spesifik
 				if (isComputerTurn) {
 					console.log("AI mencoba langkah yang tidak valid. Ini aneh.");
 				}
-
-				// Untuk pemain manusia, pesan error spesifik (misalnya "Langkah pion salah")
-				// sudah ditampilkan di dalam isValidMove, jadi kita tidak perlu melakukan apa-apa lagi di sini.
-				// Loop akan otomatis berlanjut untuk pemain yang sama.
 			}
 		}
 		this.close();
